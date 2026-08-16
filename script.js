@@ -1,53 +1,94 @@
-//You can edit ALL of the code here
-function setup() {
-  const allEpisodes = getAllEpisodes();
-  makePageForEpisodes(allEpisodes);
-}
+// Level 400
+// Adds a shows dropdown, fetches from the TVMaze API, caches every URL so nothing fetches twice
+// This also folds in the level 300 fetch switch since it wasn't done yet in this repo
 
-function episodeCode(episode) {
-  const s = String(episode.season).padStart(2, "0");
-  const e = String(episode.number).padStart(2, "0");
-  return `S${s}E${e}`;
-}
-
-function makePageForEpisodes(episodeList) {
-  const rootElem = document.getElementById("root");
-  rootElem.innerHTML = "";
-
-  episodeList.forEach((episode) => {
-    const card = document.createElement("article");
-    card.innerHTML = `
-      <h2><a href="${episode.url}">${episodeCode(episode)} - ${episode.name}</a></h2>
-      <img src="${episode.image.medium}" alt="${episode.name}">
-      <p>${episode.summary}</p>
-    `;
-    rootElem.appendChild(card);
-  });
-
-  const credit = document.createElement("p");
-  credit.innerHTML = `Data from <a href="https://www.tvmaze.com">TVMaze.com</a>`;
-  rootElem.appendChild(credit);
-}
-
-window.onload = setup;
-
+const cache = {};
 let allEpisodes = [];
 
-function setup() {
-  allEpisodes = getAllEpisodes();
+async function fetchWithCache(url) {
+  if (cache[url]) {
+    return cache[url];
+  }
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Request to ${url} failed with status ${response.status}`);
+  }
+  const data = await response.json();
+  cache[url] = data;
+  return data;
+}
+
+async function setup() {
   const rootElem = document.getElementById("root");
   rootElem.innerHTML = "";
 
-  rootElem.appendChild(createControls());
-  rootElem.appendChild(createEpisodesContainer());
+  const status = document.createElement("p");
+  status.id = "status";
+  status.textContent = "Loading shows, please wait...";
+  rootElem.appendChild(status);
 
-  renderEpisodes(allEpisodes);
-  populateSelector(allEpisodes);
+  const showSelector = document.createElement("select");
+  showSelector.id = "show-selector";
+  showSelector.hidden = true;
+  showSelector.addEventListener("change", handleShowChange);
+  rootElem.appendChild(showSelector);
+
+  const controls = createControls();
+  controls.hidden = true;
+  rootElem.appendChild(controls);
+
+  const container = createEpisodesContainer();
+  rootElem.appendChild(container);
 
   const footer = document.createElement("footer");
   footer.innerHTML =
     'Data originally provided by <a href="https://www.tvmaze.com/" target="_blank" rel="noopener">TVMaze.com</a>';
   rootElem.appendChild(footer);
+
+  try {
+    const shows = await fetchWithCache("https://api.tvmaze.com/shows");
+    const sortedShows = shows
+      .slice()
+      .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+
+    sortedShows.forEach((show) => {
+      const option = document.createElement("option");
+      option.value = show.id;
+      option.textContent = show.name;
+      showSelector.appendChild(option);
+    });
+
+    status.textContent = "";
+    showSelector.hidden = false;
+
+    const defaultShow = sortedShows.find((s) => s.id === 82) || sortedShows[0];
+    showSelector.value = defaultShow.id;
+    await loadEpisodesForShow(defaultShow.id);
+    controls.hidden = false;
+  } catch (error) {
+    status.textContent = "Something went wrong loading shows. Please try refreshing the page.";
+    console.error(error);
+  }
+}
+
+async function handleShowChange(event) {
+  const showId = event.target.value;
+  const status = document.getElementById("status");
+  status.textContent = "Loading episodes, please wait...";
+  try {
+    await loadEpisodesForShow(showId);
+    status.textContent = "";
+  } catch (error) {
+    status.textContent = "Something went wrong loading episodes. Please try again.";
+    console.error(error);
+  }
+}
+
+async function loadEpisodesForShow(showId) {
+  allEpisodes = await fetchWithCache(`https://api.tvmaze.com/shows/${showId}/episodes`);
+  document.getElementById("search-input").value = "";
+  renderEpisodes(allEpisodes);
+  populateSelector(allEpisodes);
 }
 
 function createControls() {
