@@ -1,53 +1,52 @@
-//You can edit ALL of the code here
-function setup() {
-  const allEpisodes = getAllEpisodes();
-  makePageForEpisodes(allEpisodes);
-}
-
-function episodeCode(episode) {
-  const s = String(episode.season).padStart(2, "0");
-  const e = String(episode.number).padStart(2, "0");
-  return `S${s}E${e}`;
-}
-
-function makePageForEpisodes(episodeList) {
-  const rootElem = document.getElementById("root");
-  rootElem.innerHTML = "";
-
-  episodeList.forEach((episode) => {
-    const card = document.createElement("article");
-    card.innerHTML = `
-      <h2><a href="${episode.url}">${episodeCode(episode)} - ${episode.name}</a></h2>
-      <img src="${episode.image.medium}" alt="${episode.name}">
-      <p>${episode.summary}</p>
-    `;
-    rootElem.appendChild(card);
-  });
-
-  const credit = document.createElement("p");
-  credit.innerHTML = `Data from <a href="https://www.tvmaze.com">TVMaze.com</a>`;
-  rootElem.appendChild(credit);
-}
-
-window.onload = setup;
-
+const EPISODES_URL = "https://api.tvmaze.com/shows/82/episodes";
 let allEpisodes = [];
+let hasFetchedEpisodes = false;
 
-function setup() {
-  allEpisodes = getAllEpisodes();
+async function setup() {
   const rootElem = document.getElementById("root");
   rootElem.innerHTML = "";
 
-  rootElem.appendChild(createControls());
-  rootElem.appendChild(createEpisodesContainer());
+  const status = document.createElement("p");
+  status.id = "status";
+  status.textContent = "Loading episodes, please wait...";
+  rootElem.appendChild(status);
 
-  renderEpisodes(allEpisodes);
-  populateSelector(allEpisodes);
+  const controls = createControls();
+  controls.hidden = true;
+  rootElem.appendChild(controls);
+
+  const container = createEpisodesContainer();
+  rootElem.appendChild(container);
 
   const footer = document.createElement("footer");
   footer.innerHTML =
     'Data originally provided by <a href="https://www.tvmaze.com/" target="_blank" rel="noopener">TVMaze.com</a>';
   rootElem.appendChild(footer);
+
+  try {
+    allEpisodes = await fetchEpisodesOnce();
+    status.textContent = "";
+    controls.hidden = false;
+    renderEpisodes(allEpisodes);
+    populateSelector(allEpisodes);
+  } catch (error) {
+    status.textContent =
+      "Something went wrong loading episodes. Please try refreshing the page.";
+    console.error(error);
+  }
+}
+
+async function fetchEpisodesOnce() {
+  if (hasFetchedEpisodes) {
+    return allEpisodes;
+  }
+  const response = await fetch(EPISODES_URL);
+  if (!response.ok) {
+    throw new Error(`Request failed with status ${response.status}`);
+  }
+  const data = await response.json();
+  hasFetchedEpisodes = true;
+  return data;
 }
 
 function createControls() {
